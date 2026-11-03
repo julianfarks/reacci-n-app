@@ -27,6 +27,7 @@ import com.instantreact.core.Engine
 import com.instantreact.core.FrameProcessor
 import com.instantreact.core.TriggerListener
 import com.instantreact.ui.CalibrationOverlay
+import com.instantreact.ui.DebugOverlay
 import com.instantreact.ui.FloatingPanel
 import com.instantreact.MainActivity
 
@@ -48,6 +49,7 @@ class CoreService : Service() {
     private var capture: ScreenCapture? = null
     private var panel: FloatingPanel? = null
     private var calibration: CalibrationOverlay? = null
+    private var debugOverlay: DebugOverlay? = null
     private lateinit var processor: FrameProcessor
 
     private var appliedCfg: DetectorConfig? = null
@@ -150,7 +152,8 @@ class CoreService : Service() {
                         Toast.LENGTH_LONG,
                     ).show()
                 }
-                processor.reset()
+                // Sin reset: el estado de cada punto se mantiene también con la detección parada, así que un
+                // círculo ya azul al pulsar INICIAR no dispara; solo reacciona al siguiente cambio gris -> azul.
                 Engine.running = true
             }
 
@@ -160,8 +163,21 @@ class CoreService : Service() {
 
             override fun onOpenSettings() = openMain()
 
+            override fun onToggleDebug() = toggleDebug()
+
             override fun onCalibrate() = showCalibration()
         }).also { it.show() }
+    }
+
+    private fun toggleDebug() {
+        Engine.debugMode = !Engine.debugMode
+        if (Engine.debugMode) {
+            if (debugOverlay == null) debugOverlay = DebugOverlay(this) { processor.debug }.also { it.show() }
+        } else {
+            debugOverlay?.hide()
+            debugOverlay = null
+        }
+        panel?.refresh()
     }
 
     private fun openMain() {
@@ -217,6 +233,7 @@ class CoreService : Service() {
         val system = maxOf(0.0, reaction - delayMs)
         val stats = Engine.stats
         stats.onDispatched(reaction, system, delayMs, index)
+        processor.markPressed(index, reaction)
         val ok = TapExecutor.tap(x, y, durMs, object : TapExecutor.Result {
             override fun onCompleted() {
                 stats.onTapCompleted((SystemClock.elapsedRealtimeNanos() - tFrame) / 1_000_000.0)
@@ -309,6 +326,9 @@ class CoreService : Service() {
         instance = null
         calibration?.hide()
         calibration = null
+        debugOverlay?.hide()
+        debugOverlay = null
+        Engine.debugMode = false
         panel?.hide()
         panel = null
         capture?.stop()

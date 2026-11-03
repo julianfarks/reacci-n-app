@@ -7,22 +7,38 @@ class SampleResult {
     var r = 0
     var g = 0
     var b = 0
-    var blueVotes = 0
+    var blueN = 0
+    var grayN = 0
     var total = 0
 
-    /** Un círculo se considera azul si al menos la mitad de los puntos muestreados lo son. */
-    val isBlue: Boolean get() = total > 0 && blueVotes * 2 >= total
+    /** Porcentaje (0..100) de muestras azules / grises. */
+    val bluePct: Int get() = if (total == 0) 0 else blueN * 100 / total
+    val grayPct: Int get() = if (total == 0) 0 else grayN * 100 / total
 
     val color: Int get() = ColorClassifier.pack(r, g, b)
+
+    /** Clasificación del círculo completo: exige que la inmensa mayoría de la zona interior coincida. */
+    fun classify(): Int = when {
+        total < MIN_SAMPLES -> ColorClassifier.OTHER
+        bluePct >= AGREE_PCT -> ColorClassifier.BLUE
+        grayPct >= AGREE_PCT -> ColorClassifier.GRAY
+        else -> ColorClassifier.OTHER
+    }
+
+    companion object {
+        const val MIN_SAMPLES = 8
+        const val AGREE_PCT = 85
+    }
 }
 
 /**
- * Muestrea únicamente unos pocos píxeles dentro del círculo (rejilla 5x5 recortada al disco),
- * leyendo directamente del buffer de la imagen capturada (RGBA_8888). Nunca se analiza la pantalla
- * completa: el coste es ~20 lecturas por círculo.
+ * Analiza únicamente la ZONA INTERIOR del círculo (60 % del radio de detección): rejilla 7x7 recortada
+ * al disco (~37 lecturas), lo que deja fuera bordes, sombras, números y marcadores. Un solo píxel azul
+ * en cualquier parte del área NO basta: hace falta que al menos el 85 % de la zona interior sea azul.
  */
 object RegionSampler {
-    private const val GRID = 5
+    private const val GRID = 7
+    const val INNER_PCT = 60
 
     fun sample(
         buf: ByteBuffer,
@@ -33,17 +49,18 @@ object RegionSampler {
         cx: Int,
         cy: Int,
         radius: Int,
-        threshold: Int,
+        minSat: Int,
         out: SampleResult,
     ) {
         var sr = 0
         var sg = 0
         var sb = 0
-        var votes = 0
+        var blue = 0
+        var gray = 0
         var n = 0
-        val r = if (radius < 2) 2 else radius
-        val step = maxOf(1, r * 45 / 100)
-        val r2 = r * r
+        val inner = maxOf(2, radius * INNER_PCT / 100)
+        val step = maxOf(1, inner / (GRID / 2))
+        val r2 = inner * inner + inner
         val limit = buf.limit()
         for (iy in 0 until GRID) {
             val dy = (iy - GRID / 2) * step
@@ -59,19 +76,19 @@ object RegionSampler {
                 val rr = buf.get(idx).toInt() and 0xFF
                 val gg = buf.get(idx + 1).toInt() and 0xFF
                 val bb = buf.get(idx + 2).toInt() and 0xFF
-                sr += rr
-                sg += gg
-                sb += bb
-                if (ColorClassifier.isBlue(rr, gg, bb, threshold)) votes++
+                sr += rr; sg += gg; sb += bb
+                when (ColorClassifier.classify(rr, gg, bb, minSat)) {
+                    ColorClassifier.BLUE -> blue++
+                    ColorClassifier.GRAY -> gray++
+                }
                 n++
             }
         }
         out.total = n
-        out.blueVotes = votes
+        out.blueN = blue
+        out.grayN = gray
         if (n > 0) {
-            out.r = sr / n
-            out.g = sg / n
-            out.b = sb / n
+            out.r = sr / n; out.g = sg / n; out.b = sb / n
         } else {
             out.r = 0; out.g = 0; out.b = 0
         }

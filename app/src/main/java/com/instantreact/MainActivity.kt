@@ -226,7 +226,7 @@ class MainActivity : Activity() {
         blueLabel = text("", 12f, Palette.TEXT).margins(0, dp(10), 0, 0) as TextView
         det.addView(blueLabel)
         blueSeek = seek(10, 150, cfg.blueThreshold) { v, done ->
-            blueLabel.text = "Umbral de azul: $v  (menor = más sensible)"
+            blueLabel.text = "Umbral de azul: $v · saturación HSV mínima ${com.instantreact.core.ColorClassifier.minSaturation(v)} %  (menor = más sensible)"
             if (done) Prefs.updateActive(this) { it.copy(blueThreshold = v) }
         }
         det.addView(blueSeek)

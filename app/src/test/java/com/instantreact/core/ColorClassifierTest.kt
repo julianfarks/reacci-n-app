@@ -41,7 +41,7 @@ class ColorClassifierTest {
 
     @Test fun thresholdControlsSensitivity() {
         // azul pálido
-        assertTrue(ColorClassifier.isBlue(150, 170, 230, 60))
+        assertFalse(ColorClassifier.isBlue(150, 170, 230, 60))
         assertFalse(ColorClassifier.isBlue(150, 170, 230, 150))
         assertTrue(ColorClassifier.isBlue(150, 170, 230, 20))
     }

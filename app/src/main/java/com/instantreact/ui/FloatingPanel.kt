@@ -32,6 +32,7 @@ class FloatingPanel(
         fun onStop()
         fun onOpenSettings()
         fun onCalibrate()
+        fun onToggleDebug()
     }
 
     private val wm = ctx.getSystemService(Context.WINDOW_SERVICE) as WindowManager
@@ -49,6 +50,7 @@ class FloatingPanel(
     private lateinit var tapsText: TextView
     private lateinit var startBtn: TextView
     private lateinit var stopBtn: TextView
+    private lateinit var debugBtn: TextView
 
     private var pulse: ObjectAnimator? = null
     private var attached = false
@@ -134,6 +136,10 @@ class FloatingPanel(
         bottom.addView(cfgBtn)
         bottom.addView(calBtn)
         panel.addView(bottom)
+        debugBtn = smallButton("Diagnóstico: NO", false) { callbacks.onToggleDebug() }
+        debugBtn.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        debugBtn.margins(0, ctx.dp(6), 0, 0)
+        panel.addView(debugBtn)
 
         icon = ctx.text("IR", 13f, Color.WHITE, true).apply {
             gravity = Gravity.CENTER
@@ -236,6 +242,7 @@ class FloatingPanel(
         delayText.text = PanelText.delay(cfg.delayMs)
         lastText.text = PanelText.last(s.lastReactionMs, s.lastSystemLatencyMs, s.taps, s.lastPoint)
         tapsText.text = PanelText.taps(s.taps)
+        debugBtn.text = if (Engine.debugMode) "Diagnóstico: SÍ" else "Diagnóstico: NO"
         startBtn.alpha = if (running) 0.4f else 1f
         stopBtn.alpha = if (running) 1f else 0.4f
         if (lastRunning != running) {

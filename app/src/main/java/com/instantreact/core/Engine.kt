@@ -20,5 +20,9 @@ object Engine {
     @Volatile
     var profileName: String = ""
 
+    /** Modo de diagnóstico (superposición con el estado de cada punto). */
+    @Volatile
+    var debugMode: Boolean = false
+
     val stats = StatsTracker()
 }

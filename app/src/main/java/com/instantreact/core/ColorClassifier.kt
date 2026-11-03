@@ -1,40 +1,63 @@
 package com.instantreact.core
 
 /**
- * Clasificación de color basada en enteros (sin asignaciones), pensada para ejecutarse
- * decenas de veces por fotograma.
+ * Clasificación de color en el espacio HSV (tono, saturación, valor), con enteros y sin asignaciones.
  *
- * El azul se define por *dominancia*: cuánto supera el canal B al mayor de R y G. El umbral se
- * escala con el brillo del propio píxel, así un azul oscuro (poca luz) y un azul brillante se
- * detectan igual de bien aunque el juego cambie ligeramente de brillo. Además se exige un matiz
- * entre cian-azulado y azul-violáceo claro para no confundir el azul con morado, verde o rojo.
+ *  - AZUL: tono 190°–255°, saturación ≥ mínimo configurable y valor ≥ 25 %. Un gris, aunque sea claro,
+ *    oscuro, brillante o con un tinte azulado leve, tiene saturación baja y NUNCA es azul. Cambiar el
+ *    brillo solo mueve el valor, no el tono ni la saturación.
+ *  - GRIS: saturación ≤ 25 %, o tan oscuro (valor < 25 %) que el tono carece de significado.
+ *  - Todo lo demás es OTRO (rojo, verde, morado, mezclas de animación...), que nunca dispara.
  */
 object ColorClassifier {
-    const val MIN_BLUE_CHANNEL = 50
-    const val MIN_DOMINANCE = 12
-    const val GRAY_TOLERANCE = 30
+    const val OTHER = 0
+    const val GRAY = 1
+    const val BLUE = 2
 
-    /** Matiz admitido expresado como (R-G)/(B-min(R,G)) * 100. */
-    private const val HUE_MIN = -85
-    private const val HUE_MAX = 35
+    const val BLUE_HUE_MIN = 190
+    const val BLUE_HUE_MAX = 255
+    const val MIN_VALUE = 25
+    const val GRAY_MAX_SAT = 25
 
-    fun isBlue(r: Int, g: Int, b: Int, threshold: Int): Boolean {
-        if (b < MIN_BLUE_CHANNEL) return false
-        val dominance = b - (if (r > g) r else g)
-        val needed = maxOf(MIN_DOMINANCE, threshold * b / 255)
-        if (dominance < needed) return false
-        val delta = b - (if (r < g) r else g)
-        if (delta <= 0) return false
-        val hue = (r - g) * 100 / delta
-        return hue in HUE_MIN..HUE_MAX
-    }
+    /** Umbral de azul de la interfaz (10..150, menor = más sensible) -> saturación mínima en %. */
+    fun minSaturation(threshold: Int): Int = (threshold * 3 / 4).coerceIn(15, 90)
 
-    /** Gris = poca diferencia entre canales. */
-    fun isGray(r: Int, g: Int, b: Int): Boolean {
+    fun value(r: Int, g: Int, b: Int): Int = maxOf(r, maxOf(g, b)) * 100 / 255
+
+    fun saturation(r: Int, g: Int, b: Int): Int {
         val max = maxOf(r, maxOf(g, b))
-        val min = minOf(r, minOf(g, b))
-        return max - min <= GRAY_TOLERANCE
+        if (max == 0) return 0
+        return (max - minOf(r, minOf(g, b))) * 100 / max
     }
+
+    /** Tono 0..359 (0 si no hay color). */
+    fun hue(r: Int, g: Int, b: Int): Int {
+        val max = maxOf(r, maxOf(g, b))
+        val delta = max - minOf(r, minOf(g, b))
+        if (delta == 0) return 0
+        val h = when (max) {
+            r -> 60 * (g - b) / delta
+            g -> 120 + 60 * (b - r) / delta
+            else -> 240 + 60 * (r - g) / delta
+        }
+        return (h + 360) % 360
+    }
+
+    fun classify(r: Int, g: Int, b: Int, minSat: Int): Int {
+        val v = value(r, g, b)
+        if (v < MIN_VALUE) return GRAY
+        val s = saturation(r, g, b)
+        if (s <= GRAY_MAX_SAT) return GRAY
+        if (s >= minSat) {
+            val h = hue(r, g, b)
+            if (h in BLUE_HUE_MIN..BLUE_HUE_MAX) return BLUE
+        }
+        return OTHER
+    }
+
+    fun isBlue(r: Int, g: Int, b: Int, threshold: Int): Boolean = classify(r, g, b, minSaturation(threshold)) == BLUE
+
+    fun isGray(r: Int, g: Int, b: Int): Boolean = classify(r, g, b, 100) == GRAY
 
     fun pack(r: Int, g: Int, b: Int): Int = (0xFF shl 24) or (r shl 16) or (g shl 8) or b
 }

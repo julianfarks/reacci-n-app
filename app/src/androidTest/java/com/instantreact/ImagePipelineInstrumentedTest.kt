@@ -76,8 +76,13 @@ class ImagePipelineInstrumentedTest {
             repeat(10) { push(setOf(3)) } // sigue azul: no hay duplicados
             assertEquals(listOf(3), fired.toList())
 
-            push(emptySet())          // vuelve a gris
-            push(setOf(0, 5))         // dos nuevos estímulos a la vez
+            push(emptySet()); push(emptySet())   // vuelve a gris
+            push(setOf(0))                       // nuevo estímulo
+            push(emptySet()); push(emptySet())
+            push(setOf(5))
+            assertEquals(listOf(3, 0, 5), fired.toList())
+            push(emptySet()); push(emptySet())
+            push(setOf(1, 2))                    // dos "estímulos" a la vez: ambiguo, no se pulsa nada
             assertEquals(listOf(3, 0, 5), fired.toList())
 
             val avg = procMicros.average()
