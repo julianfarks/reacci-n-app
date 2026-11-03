@@ -29,6 +29,7 @@ class FloatingPanelInstrumentedTest {
                 override fun onStop() { stops.incrementAndGet() }
                 override fun onOpenSettings() = Unit
                 override fun onCalibrate() = Unit
+                override fun onToggleDebug() = Unit
             })
             panel!!.show()
         }
