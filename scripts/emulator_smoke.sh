@@ -33,6 +33,10 @@ fi
 say "La app arranca sin cierres"
 
 say "== Pruebas instrumentadas"
+adb shell svc power stayon true
+adb shell input keyevent KEYCODE_WAKEUP
+adb shell wm dismiss-keyguard
+adb shell input keyevent 82
 adb shell input keyevent KEYCODE_HOME
 (
   sleep 8
@@ -47,7 +51,11 @@ say "== dumpsys accessibility"
 cat evidence/a11y_dump.txt 2>/dev/null | tee -a "$LOG"
 say "== logcat (accesibilidad)"
 adb logcat -d | grep -iE "ReactAccessibility|AccessibilityManager.*instantreact|UiAutomation" | head -20 | tee -a "$LOG"
-cat evidence/instrument.txt | grep -E "IR_METRIC|test=|INSTRUMENTATION_CODE|OK \(|FAILURES|Tests run|stack=" | tee -a "$LOG"
+cat evidence/instrument.txt | grep -E "IR_METRIC|test=|INSTRUMENTATION_CODE|OK \(|FAILURES|Tests run" | tee -a "$LOG"
+say "== Detalle de fallos"
+grep -A 30 "stack=" evidence/instrument.txt | head -90 | tee -a "$LOG"
+say "== Errores de runtime en logcat"
+adb logcat -d | grep -E "AndroidRuntime|FATAL|ActivityTaskManager.*(TapTarget|Displayed|START)|ActivityManager.*(TapTarget|crash)" | head -30 | tee -a "$LOG"
 adb logcat -d > evidence/logcat.txt
 adb exec-out screencap -p > evidence/after_tests.png
 
