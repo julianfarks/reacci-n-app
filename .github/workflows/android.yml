@@ -6,6 +6,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Compilar, probar y generar APK
@@ -68,3 +71,23 @@ jobs:
         with:
           name: emulator-evidence
           path: evidence/*
+
+  release:
+    name: Publicar APK en Releases
+    runs-on: ubuntu-latest
+    needs: [build, emulator]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: InstantReact-apks
+          path: dist
+      - name: Crear release "latest"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --repo "$GITHUB_REPOSITORY" --cleanup-tag -y || true
+          gh release create latest dist/InstantReact-release.apk dist/InstantReact-debug.apk \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Instant React - build ${{ github.run_number }}" \
+            --notes "APK generados y probados por CI (pruebas unitarias + emulador Android 34). Instala InstantReact-release.apk (firmado). Ver README para permisos y uso."
