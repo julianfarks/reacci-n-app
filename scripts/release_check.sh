@@ -31,8 +31,8 @@ cat evidence/app_api$API.log | tee -a "$LOG"
 grep -q "onServiceConnected OK" evidence/app_api$API.log || fail "onServiceConnected no se ejecutó"
 grep -q "canPerformGestures=true" evidence/app_api$API.log || fail "canPerformGestures no concedido"
 # El servicio debe aparecer en 'Bound' y no en 'Crashed'
-if grep -iE "Crashed services:\{.*instantreact" evidence/a11y_api$API.txt; then fail "el servicio figura como 'crashed' (esto es lo que Android muestra como «No funciona»)"; fi
-grep -iE "Bound services:\{.*instantreact" evidence/a11y_api$API.txt >/dev/null || fail "el servicio no figura en 'Bound services'"
+if grep -iE "Crashed services:\{.*Instant React" evidence/a11y_api$API.txt; then fail "el servicio figura como 'crashed' (esto es lo que Android muestra como «No funciona»)"; fi
+grep -iE "Bound services:\{.*Instant React" evidence/a11y_api$API.txt >/dev/null || fail "el servicio no figura en 'Bound services'"
 PID1=$(adb shell pidof $PKG | tr -d '\r')
 
 say "== Pulsación de prueba (dispatchGesture sobre TapTestActivity)"
@@ -46,8 +46,8 @@ say "== Cambiar a otra aplicación y volver"
 adb shell input keyevent KEYCODE_HOME; sleep 2
 adb shell am start -a android.settings.SETTINGS >/dev/null; sleep 4
 adb shell dumpsys accessibility > evidence/a11y2_api$API.txt
-grep -iE "Bound services:\{.*instantreact" evidence/a11y2_api$API.txt >/dev/null || fail "el servicio dejó de estar activo al cambiar de app"
-grep -iE "Crashed services:\{.*instantreact" evidence/a11y2_api$API.txt && fail "el servicio quedó 'crashed' tras cambiar de app"
+grep -iE "Bound services:\{.*Instant React" evidence/a11y2_api$API.txt >/dev/null || fail "el servicio dejó de estar activo al cambiar de app"
+grep -iE "Crashed services:\{.*Instant React" evidence/a11y2_api$API.txt && fail "el servicio quedó 'crashed' tras cambiar de app"
 PID2=$(adb shell pidof $PKG | tr -d '\r')
 say "PID antes=$PID1 después=$PID2"
 [ "$PID1" = "$PID2" ] || fail "el proceso se reinició"
