@@ -31,7 +31,7 @@ class TapInstrumentedTest {
 
     private fun launchTarget(): TapTargetActivity {
         val inst = InstrumentationRegistry.getInstrumentation()
-        val i = Intent().setClassName(inst.context.packageName, TapTargetActivity::class.java.name)
+        val i = Intent().setClassName(inst.targetContext.packageName, TapTargetActivity::class.java.name)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         val act = inst.startActivitySync(i) as TapTargetActivity
         inst.waitForIdleSync()
