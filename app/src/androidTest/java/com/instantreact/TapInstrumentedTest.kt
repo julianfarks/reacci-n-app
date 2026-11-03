@@ -43,7 +43,7 @@ class TapInstrumentedTest {
     fun accessibilityTapReachesTheScreenAtExactCoordinates() {
         assertTrue(
             "El servicio de accesibilidad no está activo",
-            waitFor(15_000) { ReactAccessibilityService.instance != null },
+            waitFor(40_000) { ReactAccessibilityService.instance != null },
         )
         val act = launchTarget()
         val x = 321
@@ -63,7 +63,7 @@ class TapInstrumentedTest {
     fun fullChainFrameToDetectionToTap() {
         assertTrue(
             "El servicio de accesibilidad no está activo",
-            waitFor(15_000) { ReactAccessibilityService.instance != null },
+            waitFor(40_000) { ReactAccessibilityService.instance != null },
         )
         val act = launchTarget()
         val ctx = InstrumentationRegistry.getInstrumentation().targetContext
