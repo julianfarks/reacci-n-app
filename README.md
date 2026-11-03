@@ -88,3 +88,15 @@ El workflow `.github/workflows/android.yml` compila, ejecuta las pruebas, genera
 * Apps con `FLAG_SECURE` (algunas apps bancarias/DRM) no se pueden capturar.
 * `dispatchGesture` añade una latencia propia del sistema que la app no puede eliminar; por eso se muestra separada.
 * Los juegos en línea pueden prohibir las pulsaciones automáticas en sus condiciones de uso: úsala solo donde esté permitido.
+
+
+## Detección (reconstruida)
+
+Cada punto tiene su propio estado y se compara con el anterior: **ESPERA → GRIS (armado) → AZUL (confirmado) → PULSADO → ESPERA**.
+
+- Color en **HSV**: azul = tono 190°–255°, saturación ≥ mínimo (derivado del «umbral de azul») y valor ≥ 25 %. Los grises (claros u oscuros) y los cambios de brillo nunca son azul.
+- Solo se analiza la **zona interior** (60 % del radio) con una rejilla 7×7; hace falta que ≥ 85 % de ella sea azul. Un píxel azul suelto, un borde o un elemento de interfaz no bastan.
+- Un punto solo dispara si **antes estaba en gris**. Al arrancar o tras pulsar queda bloqueado hasta ver gris (≥ 2 fotogramas tras una pulsación).
+- Si en el mismo fotograma hay **más de un candidato**, o cambia de color la mayoría de los puntos (transición, destello), no se pulsa nada.
+- **Modo diagnóstico** (botón en el panel flotante): estado, RGB, HSV, % azul/gris, cambio real confirmado, punto a pulsar, ms detección→pulsación y motivo del rechazo. Anillo verde = detección confirmada, azul = pulsación ejecutada.
+- Pruebas: `DetectionAccuracyTest` (ocho grises → 0 pulsaciones, un azul → 1 en ese punto, azul persistente, vuelta a gris, brillo, simultáneos, cambio global, azul parcial/bordes…).

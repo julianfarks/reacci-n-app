@@ -23,7 +23,7 @@ adb shell am start -W -n $PKG/.MainActivity >/dev/null
 sleep 3
 adb shell settings put secure enabled_accessibility_services $A11Y
 adb shell settings put secure accessibility_enabled 1
-sleep 5
+sleep 9
 adb shell dumpsys accessibility > evidence/a11y_api$API.txt
 grep -iE "instantreact|Bound services|Enabled services|Crashed" evidence/a11y_api$API.txt | head -12 | tee -a "$LOG"
 adb logcat -d -s InstantReact:V > evidence/app_api$API.log
@@ -37,7 +37,7 @@ PID1=$(adb shell pidof $PKG | tr -d '\r')
 
 say "== Pulsación de prueba (dispatchGesture sobre TapTestActivity)"
 adb shell am start -W -n $PKG/.TapTestActivity >/dev/null
-sleep 5
+sleep 9
 adb exec-out screencap -p > evidence/taptest_api$API.png
 adb logcat -d -s InstantReact:V | grep SELFTEST | tee -a "$LOG"
 adb logcat -d -s InstantReact:V | grep -q "SELFTEST OK" || fail "la pulsación de prueba no llegó"

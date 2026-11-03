@@ -26,6 +26,7 @@ class TapTestActivity : Activity() {
     private lateinit var target: TextView
     private lateinit var result: TextView
     private val ui = Handler(Looper.getMainLooper())
+    private var attempt = 1
     @Volatile private var touched = false
     private var touchAt = 0L
 
@@ -62,7 +63,8 @@ class TapTestActivity : Activity() {
     override fun onResume() {
         super.onResume()
         touched = false
-        ui.postDelayed({ runTest() }, 700)
+        attempt = 1
+        ui.postDelayed({ runTest() }, 1000)
     }
 
     override fun onPause() {
@@ -89,7 +91,7 @@ class TapTestActivity : Activity() {
         val t0 = SystemClock.uptimeMillis()
         val accepted = TapExecutor.tap(x, y, 20, object : TapExecutor.Result {
             override fun onCompleted() {
-                ui.postDelayed({ verdict(t0) }, 150)
+                ui.postDelayed({ verdict(t0) }, 400)
             }
 
             override fun onFailed() {
@@ -97,7 +99,7 @@ class TapTestActivity : Activity() {
             }
         })
         if (!accepted) fail("dispatchGesture() rechazó el gesto.")
-        else ui.postDelayed({ if (!touched && !isFinishing && !result.text.startsWith("✗") && !result.text.startsWith("✓")) verdict(t0) }, 2500)
+        
     }
 
     private fun verdict(t0: Long) {
@@ -108,6 +110,11 @@ class TapTestActivity : Activity() {
             result.setTextColor(Color.parseColor("#4ADE80"))
             Diagnostics.event("SELFTEST OK ($ms ms)")
             Log.i(Diagnostics.TAG, "SELFTEST OK")
+        } else if (attempt < 3) {
+            // La primera pulsación tras abrir la pantalla puede perderse mientras Android termina de mostrarla.
+            attempt++
+            Diagnostics.event("Prueba de pulsación: reintento $attempt")
+            ui.postDelayed({ runTest() }, 800)
         } else {
             fail("El gesto se ejecutó pero el toque no llegó al objetivo.")
         }
