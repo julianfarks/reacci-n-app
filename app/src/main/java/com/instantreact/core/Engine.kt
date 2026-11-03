@@ -16,5 +16,9 @@ object Engine {
     @Volatile
     var orientationMismatch: Boolean = false
 
+    /** Nombre del perfil activo (solo informativo para la interfaz). */
+    @Volatile
+    var profileName: String = ""
+
     val stats = StatsTracker()
 }

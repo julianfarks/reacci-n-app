@@ -18,17 +18,22 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import com.instantreact.core.CircleFinder
+import com.instantreact.core.DefaultLayout
 import com.instantreact.core.DetectorConfig
+import com.instantreact.core.PointCheck
+import com.instantreact.core.PointState
 import com.instantreact.service.Snapshot
 import kotlin.math.hypot
 
 /**
- * Modo de calibración: pantalla completa translúcida con 6 marcadores numerados arrastrables.
- * Permite cambiar el tamaño del área de detección, auto-detectar los 6 círculos grises, guardar o cancelar.
+ * Calibración visual con N marcadores numerados arrastrables. Cada marcador tiene su propia área de
+ * detección y un indicador: azul = sin comprobar, verde = sobre un círculo, rojo = revisar.
+ * Se pueden añadir y quitar puntos, autodetectar los círculos y verificar la colocación.
  */
 class CalibrationOverlay(
     private val ctx: Context,
     private val initial: DetectorConfig,
+    private val profileName: String,
     private val screenW: Int,
     private val screenH: Int,
     private val callbacks: Callbacks,
@@ -41,18 +46,19 @@ class CalibrationOverlay(
         fun grabSnapshot(): Snapshot?
     }
 
+    private class Marker(var x: Float, var y: Float, var r: Float, var state: Int = UNKNOWN)
+
     private val wm = ctx.getSystemService(Context.WINDOW_SERVICE) as WindowManager
     private val handler = Handler(Looper.getMainLooper())
 
-    private val markersX = FloatArray(DetectorConfig.CIRCLE_COUNT)
-    private val markersY = FloatArray(DetectorConfig.CIRCLE_COUNT)
-    private var radius = initial.radius.toFloat().coerceIn(4f, 150f)
+    private val markers = ArrayList<Marker>()
     private var selected = -1
 
     private val root = FrameLayout(ctx)
     private lateinit var canvasView: MarkerView
     private lateinit var bar: LinearLayout
-    private lateinit var radiusText: TextView
+    private lateinit var countText: TextView
+    private lateinit var sizeText: TextView
     private var barOnTop = true
     private var attached = false
 
@@ -75,12 +81,8 @@ class CalibrationOverlay(
         private val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
             strokeWidth = ctx.dp(2).toFloat()
-            color = Palette.BLUE
         }
-        private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.FILL
-            color = 0x332F8BFF
-        }
+        private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
         private val cross = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
             strokeWidth = ctx.dp(1).toFloat()
@@ -88,23 +90,39 @@ class CalibrationOverlay(
         }
         private val label = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.WHITE
-            textSize = ctx.dp(14).toFloat()
+            textSize = ctx.dp(15).toFloat()
             textAlign = Paint.Align.CENTER
             isFakeBoldText = true
+            setShadowLayer(ctx.dp(3).toFloat(), 0f, 0f, Color.BLACK)
         }
 
         override fun onDraw(canvas: Canvas) {
             canvas.drawColor(0x44000000)
-            for (i in 0 until DetectorConfig.CIRCLE_COUNT) {
-                val x = markersX[i]
-                val y = markersY[i]
-                ring.color = if (i == selected) Palette.GREEN else Palette.BLUE
-                canvas.drawCircle(x, y, radius, fill)
-                canvas.drawCircle(x, y, radius, ring)
+            for ((i, m) in markers.withIndex()) {
+                val col = when (m.state) {
+                    OK -> Palette.GREEN
+                    BAD -> Palette.RED
+                    else -> Palette.BLUE
+                }
+                fill.color = (col and 0x00FFFFFF) or 0x33000000
+                ring.color = col
+                if (i == selected) {
+                    ring.strokeWidth = ctx.dp(4).toFloat()
+                    canvas.drawCircle(m.x, m.y, m.r + ctx.dp(5), cross)
+                } else {
+                    ring.strokeWidth = ctx.dp(2).toFloat()
+                }
+                canvas.drawCircle(m.x, m.y, m.r, fill)
+                canvas.drawCircle(m.x, m.y, m.r, ring)
                 val arm = ctx.dp(8).toFloat()
-                canvas.drawLine(x - arm, y, x + arm, y, cross)
-                canvas.drawLine(x, y - arm, x, y + arm, cross)
-                canvas.drawText((i + 1).toString(), x, y - radius - ctx.dp(6), label)
+                canvas.drawLine(m.x - arm, m.y, m.x + arm, m.y, cross)
+                canvas.drawLine(m.x, m.y - arm, m.x, m.y + arm, cross)
+                val mark = when (m.state) {
+                    OK -> " ✓"
+                    BAD -> " ✗"
+                    else -> ""
+                }
+                canvas.drawText("${i + 1}$mark", m.x, m.y - m.r - ctx.dp(8), label)
             }
         }
 
@@ -113,28 +131,26 @@ class CalibrationOverlay(
                 MotionEvent.ACTION_DOWN -> {
                     var best = -1
                     var bestD = Float.MAX_VALUE
-                    for (i in 0 until DetectorConfig.CIRCLE_COUNT) {
-                        val d = hypot(e.x - markersX[i], e.y - markersY[i])
+                    for ((i, m) in markers.withIndex()) {
+                        val d = hypot(e.x - m.x, e.y - m.y)
                         if (d < bestD) {
                             bestD = d
                             best = i
                         }
                     }
-                    selected = if (bestD <= maxOf(radius * 1.6f, ctx.dp(48).toFloat())) best else -1
+                    selected = if (best >= 0 && bestD <= maxOf(markers[best].r * 1.6f, ctx.dp(48).toFloat())) best else -1
+                    updateTexts()
                     invalidate()
                     return selected >= 0
                 }
                 MotionEvent.ACTION_MOVE -> {
                     if (selected >= 0) {
-                        markersX[selected] = e.x.coerceIn(0f, width.toFloat())
-                        markersY[selected] = e.y.coerceIn(0f, height.toFloat())
+                        val m = markers[selected]
+                        m.x = e.x.coerceIn(0f, width.toFloat())
+                        m.y = e.y.coerceIn(0f, height.toFloat())
+                        m.state = UNKNOWN
                         invalidate()
                     }
-                    return true
-                }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    selected = -1
-                    invalidate()
                     return true
                 }
             }
@@ -151,14 +167,23 @@ class CalibrationOverlay(
             background = roundedBg(Palette.PANEL, ctx.dp(16).toFloat(), Palette.BLUE_DIM, ctx.dp(1))
             setPadding(ctx.dp(12), ctx.dp(10), ctx.dp(12), ctx.dp(12))
         }
-        bar.addView(ctx.text("Calibración", 13f, Palette.BLUE, true))
-        bar.addView(ctx.text("Arrastra los 6 marcadores sobre los círculos grises.", 11f, Palette.MUTED))
+        bar.addView(ctx.text("Calibración · $profileName", 13f, Palette.BLUE, true))
+        bar.addView(ctx.text("Arrastra cada marcador al centro de su círculo. Toca uno para seleccionarlo.", 11f, Palette.MUTED))
+
+        val countRow = ctx.row()
+        countRow.margins(0, ctx.dp(8), 0, 0)
+        countText = ctx.text("", 12f, Palette.TEXT, true)
+        countText.weight(1f)
+        countRow.addView(countText)
+        countRow.addView(ctx.pill("Quitar", false, 12f) { removePoint() })
+        countRow.addView(ctx.pill("Añadir", false, 12f) { addPoint() }.margins(ctx.dp(6), 0, 0, 0))
+        bar.addView(countRow)
 
         val sizeRow = ctx.row()
-        sizeRow.margins(0, ctx.dp(8), 0, 0)
-        radiusText = ctx.text("", 12f, Palette.TEXT, true)
-        radiusText.weight(1f)
-        sizeRow.addView(radiusText)
+        sizeRow.margins(0, ctx.dp(6), 0, 0)
+        sizeText = ctx.text("", 12f, Palette.TEXT, true)
+        sizeText.weight(1f)
+        sizeRow.addView(sizeText)
         sizeRow.addView(ctx.pill("−", false, 14f) { changeRadius(-2f) })
         sizeRow.addView(ctx.pill("+", false, 14f) { changeRadius(2f) }.margins(ctx.dp(6), 0, 0, 0))
         bar.addView(sizeRow)
@@ -166,28 +191,36 @@ class CalibrationOverlay(
         val actions = ctx.row()
         actions.margins(0, ctx.dp(8), 0, 0)
         val auto = ctx.pill("Auto", false, 12f) { autoDetect() }
-        val save = ctx.pill("Guardar", true, 12f) { save() }
-        val cancel = ctx.pill("Cancelar", false, 12f) { callbacks.onCancel() }
+        val verify = ctx.pill("Verificar", false, 12f) { verify() }
         val move = ctx.pill("⇅", false, 12f) { toggleBar() }
         auto.weight(1f)
-        save.weight(1f)
-        cancel.weight(1f)
+        verify.weight(1f)
         (auto.layoutParams as LinearLayout.LayoutParams).rightMargin = ctx.dp(4)
-        (save.layoutParams as LinearLayout.LayoutParams).rightMargin = ctx.dp(4)
-        (cancel.layoutParams as LinearLayout.LayoutParams).rightMargin = ctx.dp(4)
+        (verify.layoutParams as LinearLayout.LayoutParams).rightMargin = ctx.dp(4)
         actions.addView(auto)
-        actions.addView(save)
-        actions.addView(cancel)
+        actions.addView(verify)
         actions.addView(move)
         bar.addView(actions)
 
+        val end = ctx.row()
+        end.margins(0, ctx.dp(6), 0, 0)
+        val save = ctx.pill("Guardar", true, 12f) { save() }
+        val cancel = ctx.pill("Cancelar", false, 12f) { callbacks.onCancel() }
+        save.weight(1f)
+        cancel.weight(1f)
+        (save.layoutParams as LinearLayout.LayoutParams).rightMargin = ctx.dp(4)
+        end.addView(save)
+        end.addView(cancel)
+        bar.addView(end)
+        bar.addView(ctx.text("Verde ✓ = sobre un círculo · Rojo ✗ = revisar · Azul = sin comprobar", 10f, Palette.MUTED).margins(0, ctx.dp(6), 0, 0))
+
         placeBar()
-        updateRadiusText()
+        updateTexts()
     }
 
     private fun placeBar() {
         root.removeView(bar)
-        val barLp = FrameLayout.LayoutParams(ctx.dp(300), ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+        val barLp = FrameLayout.LayoutParams(ctx.dp(320), ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             gravity = (if (barOnTop) Gravity.TOP else Gravity.BOTTOM) or Gravity.CENTER_HORIZONTAL
             topMargin = ctx.dp(36)
             bottomMargin = ctx.dp(36)
@@ -200,29 +233,72 @@ class CalibrationOverlay(
         placeBar()
     }
 
-    private fun changeRadius(delta: Float) {
-        radius = (radius + delta).coerceIn(4f, 150f)
-        updateRadiusText()
-        canvasView.invalidate()
-    }
-
-    private fun updateRadiusText() {
-        radiusText.text = "Área de detección: ${radius.toInt()} px"
-    }
-
-    private fun defaultPositions() {
-        val cols = 3
-        for (i in 0 until DetectorConfig.CIRCLE_COUNT) {
-            val c = i % cols
-            val r = i / cols
-            markersX[i] = screenW * (c + 1) / (cols + 1f)
-            markersY[i] = screenH * (0.4f + 0.2f * r)
+    private fun updateTexts() {
+        countText.text = "Puntos: ${markers.size}"
+        sizeText.text = if (selected in markers.indices) {
+            "Área (punto ${selected + 1}): ${markers[selected].r.toInt()} px"
+        } else {
+            "Área (todos): ${if (markers.isEmpty()) 0 else markers.map { it.r }.average().toInt()} px"
         }
     }
 
+    private fun changeRadius(delta: Float) {
+        if (selected in markers.indices) {
+            val m = markers[selected]
+            m.r = (m.r + delta).coerceIn(4f, 300f)
+            m.state = UNKNOWN
+        } else {
+            for (m in markers) {
+                m.r = (m.r + delta).coerceIn(4f, 300f)
+                m.state = UNKNOWN
+            }
+        }
+        updateTexts()
+        canvasView.invalidate()
+    }
+
+    private fun addPoint() {
+        if (markers.size >= DetectorConfig.MAX_POINTS) {
+            Toast.makeText(ctx, "Máximo ${DetectorConfig.MAX_POINTS} puntos", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val r = if (markers.isEmpty()) DefaultLayout.defaultRadius(screenW).toFloat() else markers.map { it.r }.average().toFloat()
+        val k = markers.size
+        val m = Marker(
+            screenW / 2f + ((k % 5) - 2) * ctx.dp(28),
+            screenH * 0.5f + ((k / 5) % 4) * ctx.dp(28),
+            r,
+        )
+        markers.add(m)
+        selected = markers.size - 1
+        updateTexts()
+        canvasView.invalidate()
+    }
+
+    private fun removePoint() {
+        if (markers.size <= 1) {
+            Toast.makeText(ctx, "Debe quedar al menos un punto", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val idx = if (selected in markers.indices) selected else markers.size - 1
+        markers.removeAt(idx)
+        selected = -1
+        updateTexts()
+        canvasView.invalidate()
+    }
+
+    private fun defaultPositions(n: Int) {
+        val (xs, ys) = DefaultLayout.positions(n, screenW, screenH)
+        val r = DefaultLayout.defaultRadius(screenW).toFloat()
+        markers.clear()
+        for (i in 0 until n) markers.add(Marker(xs[i].toFloat(), ys[i].toFloat(), r))
+    }
+
     private fun loadInitial(offsetX: Int, offsetY: Int) {
-        if (!initial.calibrated) {
-            defaultPositions()
+        markers.clear()
+        val n = initial.count
+        if (n == 0) {
+            defaultPositions(DetectorConfig.DEFAULT_COUNT)
             return
         }
         var sx = 1f
@@ -230,62 +306,101 @@ class CalibrationOverlay(
         if (initial.calibW > 0 && initial.calibH > 0 && (initial.calibW != screenW || initial.calibH != screenH)) {
             val same = (initial.calibW >= initial.calibH) == (screenW >= screenH)
             if (!same) {
-                defaultPositions()
+                defaultPositions(n)
                 return
             }
             sx = screenW.toFloat() / initial.calibW
             sy = screenH.toFloat() / initial.calibH
         }
-        for (i in 0 until DetectorConfig.CIRCLE_COUNT) {
-            markersX[i] = initial.xs[i] * sx - offsetX
-            markersY[i] = initial.ys[i] * sy - offsetY
+        for (i in 0 until n) {
+            markers.add(
+                Marker(
+                    initial.xs[i] * sx - offsetX,
+                    initial.ys[i] * sy - offsetY,
+                    initial.radii[i] * (sx + sy) / 2f,
+                ),
+            )
         }
     }
 
-    private fun autoDetect() {
+    /** Oculta la superposición un instante para ver la pantalla limpia y entrega la captura. */
+    private fun withCleanSnapshot(action: (Snapshot) -> Unit) {
         root.visibility = View.INVISIBLE
         handler.postDelayed({
             val snap = callbacks.grabSnapshot()
             root.visibility = View.VISIBLE
             if (snap == null) {
                 Toast.makeText(ctx, "No hay captura disponible todavía", Toast.LENGTH_SHORT).show()
-                return@postDelayed
+            } else {
+                action(snap)
             }
-            val found = CircleFinder.find(snap.pixels, snap.w, snap.h)
+        }, 250L)
+    }
+
+    private fun checkAll(snap: Snapshot): Int {
+        val loc = IntArray(2)
+        canvasView.getLocationOnScreen(loc)
+        var ok = 0
+        for (m in markers) {
+            val st = PointCheck.evaluate(
+                snap.pixels, snap.w, snap.h, snap.step,
+                Math.round(m.x + loc[0]), Math.round(m.y + loc[1]), Math.round(m.r),
+                initial.blueThreshold,
+            )
+            m.state = if (st == PointState.BAD) BAD else OK
+            if (st != PointState.BAD) ok++
+        }
+        canvasView.invalidate()
+        return ok
+    }
+
+    private fun verify(silent: Boolean = false) {
+        withCleanSnapshot { snap ->
+            val ok = checkAll(snap)
+            if (!silent) {
+                val msg = if (ok == markers.size) "Los ${markers.size} puntos están sobre un círculo ✓"
+                else "$ok de ${markers.size} puntos correctos. Revisa los marcados con ✗."
+                Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun autoDetect() {
+        withCleanSnapshot { snap ->
+            val found = CircleFinder.find(snap.pixels, snap.w, snap.h, markers.size)
             if (found.isEmpty()) {
                 Toast.makeText(ctx, "No encontré círculos grises. Colócalos a mano.", Toast.LENGTH_LONG).show()
-                return@postDelayed
+                return@withCleanSnapshot
             }
             val loc = IntArray(2)
             canvasView.getLocationOnScreen(loc)
             for ((i, c) in found.withIndex()) {
-                if (i >= DetectorConfig.CIRCLE_COUNT) break
-                markersX[i] = (c.x * snap.step + snap.step / 2f) - loc[0]
-                markersY[i] = (c.y * snap.step + snap.step / 2f) - loc[1]
+                if (i >= markers.size) break
+                markers[i].x = (c.x * snap.step + snap.step / 2f) - loc[0]
+                markers[i].y = (c.y * snap.step + snap.step / 2f) - loc[1]
+                markers[i].r = (c.radius * snap.step * 0.55f).coerceIn(4f, 300f)
             }
-            val avgR = found.map { it.radius }.average().toFloat() * snap.step
-            radius = (avgR * 0.7f).coerceIn(4f, 150f)
-            updateRadiusText()
-            canvasView.invalidate()
-            val msg = if (found.size < DetectorConfig.CIRCLE_COUNT) {
-                "Encontré ${found.size} de 6. Coloca el resto a mano."
+            val ok = checkAll(snap)
+            updateTexts()
+            val msg = if (found.size < markers.size) {
+                "Encontré ${found.size} de ${markers.size} círculos. Coloca el resto a mano."
             } else {
-                "Encontré los 6 círculos. Revisa y pulsa Guardar."
+                "Encontré los ${markers.size} círculos ($ok verificados). Revisa y pulsa Guardar."
             }
             Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show()
-        }, 250L)
+        }
     }
 
     private fun save() {
+        if (markers.isEmpty()) return
         val loc = IntArray(2)
         canvasView.getLocationOnScreen(loc)
-        val xs = IntArray(DetectorConfig.CIRCLE_COUNT) { Math.round(markersX[it] + loc[0]) }
-        val ys = IntArray(DetectorConfig.CIRCLE_COUNT) { Math.round(markersY[it] + loc[1]) }
+        val n = markers.size
         callbacks.onSave(
             initial.copy(
-                xs = xs,
-                ys = ys,
-                radius = radius.toInt(),
+                xs = IntArray(n) { Math.round(markers[it].x + loc[0]) },
+                ys = IntArray(n) { Math.round(markers[it].y + loc[1]) },
+                radii = IntArray(n) { Math.round(markers[it].r) },
                 calibrated = true,
                 calibW = screenW,
                 calibH = screenH,
@@ -302,7 +417,10 @@ class CalibrationOverlay(
             val loc = IntArray(2)
             canvasView.getLocationOnScreen(loc)
             loadInitial(loc[0], loc[1])
+            updateTexts()
             canvasView.invalidate()
+            // Al abrir, comprueba automáticamente si los puntos están sobre círculos.
+            handler.postDelayed({ if (attached && selected < 0) verify(silent = true) }, 700L)
         }
     }
 
@@ -315,5 +433,11 @@ class CalibrationOverlay(
             }
             attached = false
         }
+    }
+
+    companion object {
+        private const val UNKNOWN = 0
+        private const val OK = 1
+        private const val BAD = 2
     }
 }

@@ -10,6 +10,7 @@ package com.instantreact.core
  * Con rearmFrames = 1 se detectan cambios muy rápidos (azul, gris, azul en fotogramas consecutivos).
  */
 class TriggerStateMachine(count: Int, private val rearmFrames: Int = 1) {
+    val size: Int = count
     private val armed = BooleanArray(count) { true }
     private val nonBlue = IntArray(count)
 

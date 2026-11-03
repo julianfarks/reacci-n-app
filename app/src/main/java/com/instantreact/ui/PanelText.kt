@@ -4,8 +4,13 @@ package com.instantreact.ui
 object PanelText {
     fun delay(ms: Long) = "Retraso configurado: $ms ms"
 
-    fun last(reactionMs: Double, systemMs: Double, taps: Int): String =
-        if (taps == 0) "Último: —" else "Último: ${reactionMs.toInt()} ms · sistema ${systemMs.toInt()} ms"
+    fun last(reactionMs: Double, systemMs: Double, taps: Int, point: Int = -1): String =
+        if (taps == 0) "Último: —" else {
+            val who = if (point >= 0) "punto ${point + 1} · " else ""
+            "Último: $who${reactionMs.toInt()} ms · sistema ${systemMs.toInt()} ms"
+        }
+
+    fun points(n: Int, profile: String) = if (profile.isEmpty()) "Puntos: $n" else "Puntos: $n · $profile"
 
     fun taps(n: Int) = "Pulsaciones: $n"
 

@@ -68,7 +68,7 @@ class TapInstrumentedTest {
         val act = launchTarget()
         val ctx = InstrumentationRegistry.getInstrumentation().targetContext
         val m = realScreen(ctx)
-        val layout = Layout6(m.widthPixels, m.heightPixels)
+        val layout = LayoutN(m.widthPixels, m.heightPixels)
         val processor = FrameProcessor(layout.config())
 
         val thread = HandlerThread("chain-test").also { it.start() }

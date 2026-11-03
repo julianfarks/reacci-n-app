@@ -49,24 +49,43 @@ class TestScreen(val w: Int, val h: Int, padPixels: Int = 0) {
     }
 }
 
-/** Disposición del minijuego: 6 círculos en 3 columnas x 2 filas. */
-class GameLayout(val w: Int, val h: Int) {
+/** Disposición de N puntos sobre una pantalla (por defecto la rejilla por defecto de la app). */
+class GameLayout(val w: Int, val h: Int, val n: Int = 6, xsIn: IntArray? = null, ysIn: IntArray? = null) {
     val radius = minOf(w, h) * 7 / 100
-    val xs = IntArray(6) { w * (it % 3 + 1) / 4 }
-    val ys = IntArray(6) { h * (4 + 2 * (it / 3)) / 10 }
+    val xs: IntArray
+    val ys: IntArray
 
-    fun draw(screen: TestScreen, blue: Set<Int> = emptySet(), grayLevel: Int = 128, blueScale: Double = 1.0) {
-        for (i in 0 until 6) {
+    init {
+        if (xsIn != null && ysIn != null) {
+            xs = xsIn; ys = ysIn
+        } else if (n == 6) {
+            xs = IntArray(6) { w * (it % 3 + 1) / 4 }
+            ys = IntArray(6) { h * (4 + 2 * (it / 3)) / 10 }
+        } else {
+            val (x, y) = DefaultLayout.positions(n, w, h)
+            xs = x; ys = y
+        }
+    }
+
+    fun draw(
+        screen: TestScreen,
+        blue: Set<Int> = emptySet(),
+        grayLevel: Int = 128,
+        blueScale: Double = 1.0,
+        gray: Triple<Int, Int, Int>? = null,
+    ) {
+        for (i in 0 until n) {
             if (i in blue) {
                 screen.circle(xs[i], ys[i], radius, (40 * blueScale).toInt(), (120 * blueScale).toInt(), (255 * blueScale).toInt())
             } else {
-                screen.circle(xs[i], ys[i], radius, grayLevel, grayLevel, grayLevel)
+                val g = gray ?: Triple(grayLevel, grayLevel, grayLevel)
+                screen.circle(xs[i], ys[i], radius, g.first, g.second, g.third)
             }
         }
     }
 
     fun config(detectRadius: Int = radius * 6 / 10, threshold: Int = 60, delay: Long = 0L) = DetectorConfig(
-        xs = xs.copyOf(), ys = ys.copyOf(), radius = detectRadius, blueThreshold = threshold,
+        xs = xs.copyOf(), ys = ys.copyOf(), radii = IntArray(n) { detectRadius }, blueThreshold = threshold,
         delayMs = delay, calibrated = true, calibW = w, calibH = h,
     )
 }

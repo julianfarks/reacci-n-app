@@ -9,6 +9,12 @@ class PanelTextTest {
     @Test fun lastShowsBothValues() {
         assertEquals("Último: —", PanelText.last(0.0, 0.0, 0))
         assertEquals("Último: 85 ms · sistema 55 ms", PanelText.last(85.4, 55.2, 3))
+        assertEquals("Último: punto 5 · 85 ms · sistema 55 ms", PanelText.last(85.4, 55.2, 3, 4))
+    }
+
+    @Test fun pointsText() {
+        assertEquals("Puntos: 8 · Perfil 8 puntos", PanelText.points(8, "Perfil 8 puntos"))
+        assertEquals("Puntos: 3", PanelText.points(3, ""))
     }
 
     @Test fun tapsCounter() = assertEquals("Pulsaciones: 12", PanelText.taps(12))

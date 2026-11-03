@@ -43,6 +43,7 @@ class FloatingPanel(
     private lateinit var icon: TextView
     private lateinit var dot: View
     private lateinit var stateText: TextView
+    private lateinit var pointsText: TextView
     private lateinit var delayText: TextView
     private lateinit var lastText: TextView
     private lateinit var tapsText: TextView
@@ -102,8 +103,10 @@ class FloatingPanel(
         attachDrag(header, null)
         panel.addView(header)
 
-        stateText = ctx.text("Detenido", 12f, Palette.TEXT, true).margins(0, ctx.dp(6), 0, ctx.dp(6)) as TextView
+        stateText = ctx.text("Detenido", 12f, Palette.TEXT, true).margins(0, ctx.dp(6), 0, 0) as TextView
         panel.addView(stateText)
+        pointsText = ctx.text("", 11f, Palette.MUTED).margins(0, ctx.dp(1), 0, ctx.dp(6)) as TextView
+        panel.addView(pointsText)
 
         val buttons = ctx.row()
         startBtn = smallButton("INICIAR", true) { callbacks.onStart() }
@@ -229,8 +232,9 @@ class FloatingPanel(
         val s = Engine.stats.snapshot()
         val running = Engine.running
         stateText.text = PanelText.state(running, cfg.calibrated, Engine.orientationMismatch)
+        pointsText.text = PanelText.points(cfg.count, Engine.profileName)
         delayText.text = PanelText.delay(cfg.delayMs)
-        lastText.text = PanelText.last(s.lastReactionMs, s.lastSystemLatencyMs, s.taps)
+        lastText.text = PanelText.last(s.lastReactionMs, s.lastSystemLatencyMs, s.taps, s.lastPoint)
         tapsText.text = PanelText.taps(s.taps)
         startBtn.alpha = if (running) 0.4f else 1f
         stopBtn.alpha = if (running) 1f else 0.4f

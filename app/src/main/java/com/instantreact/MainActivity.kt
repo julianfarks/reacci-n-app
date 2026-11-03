@@ -2,6 +2,7 @@ package com.instantreact
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -20,6 +21,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.SeekBar
@@ -27,6 +29,7 @@ import android.widget.TextView
 import android.widget.Toast
 import com.instantreact.core.DetectorConfig
 import com.instantreact.core.Engine
+import com.instantreact.core.Profiles
 import com.instantreact.service.CoreService
 import com.instantreact.service.Prefs
 import com.instantreact.service.ReactAccessibilityService
@@ -41,11 +44,17 @@ import com.instantreact.ui.text
 import com.instantreact.ui.weight
 import java.util.Locale
 
-/** Pantalla principal: permisos, tiempo de reacción, detección, calibración y estadísticas. */
+/** Pantalla principal: panel de estado, permisos, perfiles, tiempo de reacción, detección y estadísticas. */
 class MainActivity : Activity() {
 
     private val handler = Handler(Looper.getMainLooper())
 
+    private lateinit var pointsInfo: TextView
+    private lateinit var stateInfo: TextView
+    private lateinit var delaySummary: TextView
+    private lateinit var latencySummary: TextView
+    private lateinit var respSummary: TextView
+    private lateinit var profileInfo: TextView
     private lateinit var overlayStatus: TextView
     private lateinit var accStatus: TextView
     private lateinit var captureStatus: TextView
@@ -58,6 +67,8 @@ class MainActivity : Activity() {
     private lateinit var blueLabel: TextView
     private lateinit var radiusLabel: TextView
     private lateinit var tapLabel: TextView
+    private lateinit var blueSeek: SeekBar
+    private lateinit var radiusSeek: SeekBar
     private val chips = ArrayList<Pair<TextView, Long>>()
     private lateinit var customChip: TextView
 
@@ -70,7 +81,7 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Prefs.init(this)
+        Prefs.init(this) // primer arranque: se crean los perfiles y los 8 puntos ya calibrados
         window.statusBarColor = Palette.BG
         window.navigationBarColor = Palette.BG
         setContentView(buildUi())
@@ -100,11 +111,35 @@ class MainActivity : Activity() {
             setPadding(dp(16), dp(24), dp(16), dp(32))
         }
         content.addView(text("Instant React", 28f, Color.WHITE, true))
-        content.addView(text("Detecta el círculo azul y pulsa por ti, al instante.", 13f, Palette.MUTED).margins(0, dp(2), 0, dp(4)))
+        content.addView(text("Detecta el punto que se ilumina de azul y pulsa por ti, al instante.", 13f, Palette.MUTED).margins(0, dp(2), 0, dp(4)))
+
+        // --- Panel principal
+        val panel = card()
+        panel.addView(text("Panel", 16f, Palette.BLUE, true))
+        pointsInfo = text("", 20f, Color.WHITE, true).margins(0, dp(6), 0, dp(8)) as TextView
+        panel.addView(pointsInfo)
+        val panelBtns = row()
+        val countBtn = pillView("Modificar cantidad") { showCountDialog() }
+        val calBtn = pillView("Calibrar", true) { startCalibration() }
+        countBtn.weight(1f)
+        calBtn.weight(1f)
+        (countBtn.layoutParams as LinearLayout.LayoutParams).rightMargin = dp(8)
+        panelBtns.addView(countBtn)
+        panelBtns.addView(calBtn)
+        panel.addView(panelBtns)
+        stateInfo = text("", 13f, Palette.TEXT, true).margins(0, dp(12), 0, 0) as TextView
+        delaySummary = text("", 12f, Palette.TEXT).margins(0, dp(4), 0, 0) as TextView
+        latencySummary = text("", 12f, Palette.MUTED).margins(0, dp(2), 0, 0) as TextView
+        respSummary = text("", 12f, Palette.TEXT).margins(0, dp(2), 0, 0) as TextView
+        panel.addView(stateInfo)
+        panel.addView(delaySummary)
+        panel.addView(latencySummary)
+        panel.addView(respSummary)
+        content.addView(panel)
 
         // --- Permisos
         val perms = card()
-        perms.addView(text("1 · Permisos", 16f, Palette.BLUE, true))
+        perms.addView(text("Permisos", 16f, Palette.BLUE, true))
         perms.addView(
             text(
                 "Android exige que tú los concedas. Instant React no puede saltarse ninguno.",
@@ -128,9 +163,35 @@ class MainActivity : Activity() {
         activateBtn.margins(0, dp(12), 0, 0)
         content.addView(activateBtn)
 
+        // --- Perfiles
+        val prof = card()
+        prof.addView(text("Perfiles de calibración", 16f, Palette.BLUE, true))
+        prof.addView(
+            text("Cada perfil guarda sus puntos, el tamaño de cada área y el umbral de color.", 12f, Palette.MUTED).margins(0, dp(2), 0, dp(8)),
+        )
+        profileInfo = text("", 14f, Palette.TEXT, true) as TextView
+        prof.addView(profileInfo)
+        val pr1 = row()
+        pr1.margins(0, dp(10), 0, 0)
+        val switchBtn = pillView("Cambiar perfil") { showProfilesDialog() }
+        val copyBtn = pillView("Guardar copia", false) { saveCopy() }
+        switchBtn.weight(1f); copyBtn.weight(1f)
+        (switchBtn.layoutParams as LinearLayout.LayoutParams).rightMargin = dp(8)
+        pr1.addView(switchBtn); pr1.addView(copyBtn)
+        prof.addView(pr1)
+        val pr2 = row()
+        pr2.margins(0, dp(8), 0, 0)
+        val renBtn = pillView("Renombrar", false) { renameProfile() }
+        val delBtn = pillView("Eliminar", false) { deleteProfile() }
+        renBtn.weight(1f); delBtn.weight(1f)
+        (renBtn.layoutParams as LinearLayout.LayoutParams).rightMargin = dp(8)
+        pr2.addView(renBtn); pr2.addView(delBtn)
+        prof.addView(pr2)
+        content.addView(prof)
+
         // --- Tiempo de reacción
         val delayCard = card()
-        delayCard.addView(text("2 · Tiempo de reacción", 16f, Palette.BLUE, true))
+        delayCard.addView(text("Tiempo de reacción", 16f, Palette.BLUE, true))
         delayCard.addView(
             text("Retraso que se espera antes de pulsar. 0 ms = pulsación inmediata.", 12f, Palette.MUTED).margins(0, dp(2), 0, dp(10)),
         )
@@ -157,46 +218,49 @@ class MainActivity : Activity() {
         content.addView(delayCard)
 
         // --- Detección
+        val cfg = Engine.config
         val det = card()
-        det.addView(text("3 · Detección y calibración", 16f, Palette.BLUE, true))
+        det.addView(text("Detección y calibración", 16f, Palette.BLUE, true))
         blueLabel = text("", 12f, Palette.TEXT).margins(0, dp(10), 0, 0) as TextView
         det.addView(blueLabel)
-        det.addView(seek(10, 150, Engine.config.blueThreshold) { v, done ->
+        blueSeek = seek(10, 150, cfg.blueThreshold) { v, done ->
             blueLabel.text = "Umbral de azul: $v  (menor = más sensible)"
-            if (done) updateConfig { it.copy(blueThreshold = v) }
-        })
+            if (done) Prefs.updateActive(this) { it.copy(blueThreshold = v) }
+        }
+        det.addView(blueSeek)
         radiusLabel = text("", 12f, Palette.TEXT).margins(0, dp(10), 0, 0) as TextView
         det.addView(radiusLabel)
-        det.addView(seek(4, 80, Engine.config.radius) { v, done ->
-            radiusLabel.text = "Tamaño del área de detección: $v px"
-            if (done) updateConfig { it.copy(radius = v) }
-        })
+        val avgR = if (cfg.count == 0) 18 else cfg.radii.average().toInt()
+        radiusSeek = seek(4, 150, avgR) { v, done ->
+            radiusLabel.text = "Tamaño del área de detección (todos los puntos): $v px"
+            if (done) Prefs.updateActive(this) { it.copy(radii = IntArray(it.count) { v }) }
+        }
+        det.addView(radiusSeek)
         tapLabel = text("", 12f, Palette.TEXT).margins(0, dp(10), 0, 0) as TextView
         det.addView(tapLabel)
-        det.addView(seek(1, 60, Engine.config.tapDurationMs.toInt()) { v, done ->
+        det.addView(seek(1, 60, cfg.tapDurationMs.toInt()) { v, done ->
             tapLabel.text = "Duración del toque: $v ms"
-            if (done) updateConfig { it.copy(tapDurationMs = v.toLong()) }
+            if (done) Prefs.setTapDuration(this, v.toLong())
         })
         calibInfo = text("", 12f, Palette.MUTED).margins(0, dp(12), 0, 0) as TextView
         det.addView(calibInfo)
-        det.addView(pillView("CALIBRAR LOS 6 CÍRCULOS") { startCalibration() }.margins(0, dp(8), 0, 0))
+        det.addView(pillView("CALIBRAR PUNTOS") { startCalibration() }.margins(0, dp(8), 0, 0))
         content.addView(det)
 
         // --- Estadísticas
         val st = card()
-        st.addView(text("4 · Estadísticas", 16f, Palette.BLUE, true))
+        st.addView(text("Estadísticas", 16f, Palette.BLUE, true))
         statsText = text("", 13f, Palette.TEXT).margins(0, dp(8), 0, dp(8)) as TextView
         statsText.setLineSpacing(0f, 1.25f)
         st.addView(statsText)
         st.addView(pillView("Reiniciar estadísticas", false) { Engine.stats.reset() })
         content.addView(st)
 
-        val scroll = ScrollView(this).apply {
+        return ScrollView(this).apply {
             setBackgroundColor(Palette.BG)
             isFillViewport = true
             addView(content, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         }
-        return scroll
     }
 
     private fun pillView(label: String, filled: Boolean = true, onClick: () -> Unit): TextView =
@@ -219,20 +283,18 @@ class MainActivity : Activity() {
     }
 
     private fun buildChips(parent: LinearLayout) {
-        val items = ArrayList<Pair<String, Long>>()
-        for (ms in DetectorConfig.DELAY_PRESETS) items.add(Pair("$ms ms", ms))
         var line: LinearLayout? = null
-        for ((i, it) in items.withIndex()) {
+        for ((i, ms) in DetectorConfig.DELAY_PRESETS.withIndex()) {
             if (i % 3 == 0) {
                 line = row()
                 line.margins(0, if (i == 0) 0 else dp(8), 0, 0)
                 parent.addView(line)
             }
-            val chip = chipView(it.first) { setDelay(it.second) }
+            val chip = chipView("$ms ms") { setDelay(ms) }
             chip.weight(1f)
             (chip.layoutParams as LinearLayout.LayoutParams).setMargins(if (i % 3 == 0) 0 else dp(8), 0, 0, 0)
             line!!.addView(chip)
-            chips.add(Pair(chip, it.second))
+            chips.add(Pair(chip, ms))
         }
         customChip = chipView("Personalizado") { customDelay.requestFocus() }
         customChip.margins(0, dp(8), 0, 0)
@@ -270,14 +332,172 @@ class MainActivity : Activity() {
             onChange(this.progress + lo, false)
         }
 
-    // ------------------------------------------------------------- acciones
+    // ------------------------------------------------------------- diálogos
 
-    private fun updateConfig(change: (DetectorConfig) -> DetectorConfig) {
-        Prefs.save(this, change(Engine.config))
+    private fun dialog(): AlertDialog.Builder = AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
+
+    private fun padded(v: View): View = FrameLayout(this).apply {
+        setPadding(dp(20), dp(8), dp(20), dp(4))
+        addView(v)
     }
 
+    private fun showCountDialog() {
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        lateinit var dlg: AlertDialog
+        var line: LinearLayout? = null
+        for ((i, n) in DetectorConfig.COUNT_PRESETS.withIndex()) {
+            if (i % 3 == 0) {
+                line = row()
+                line.margins(0, if (i == 0) 0 else dp(8), 0, 0)
+                box.addView(line)
+            }
+            val chip = chipView("$n") { dlg.dismiss(); applyCount(n) }
+            chip.weight(1f)
+            (chip.layoutParams as LinearLayout.LayoutParams).setMargins(if (i % 3 == 0) 0 else dp(8), 0, 0, 0)
+            line!!.addView(chip)
+        }
+        val custom = EditText(this).apply {
+            hint = "Personalizada (1–${DetectorConfig.MAX_POINTS})"
+            setHintTextColor(Palette.MUTED)
+            setTextColor(Palette.TEXT)
+            inputType = InputType.TYPE_CLASS_NUMBER
+        }
+        val crow = row()
+        crow.margins(0, dp(12), 0, 0)
+        custom.weight(1f)
+        crow.addView(custom)
+        crow.addView(pillView("Aplicar") {
+            val n = custom.text.toString().trim().toIntOrNull()
+            if (n == null || n !in 1..DetectorConfig.MAX_POINTS) {
+                Toast.makeText(this, "Introduce un número entre 1 y ${DetectorConfig.MAX_POINTS}", Toast.LENGTH_SHORT).show()
+            } else {
+                dlg.dismiss(); applyCount(n)
+            }
+        }.margins(dp(8), 0, 0, 0))
+        box.addView(crow)
+        dlg = dialog()
+            .setTitle("Cantidad de puntos (ahora: ${Engine.config.count})")
+            .setView(padded(box))
+            .setNegativeButton("Cerrar", null)
+            .create()
+        dlg.show()
+    }
+
+    private fun applyCount(n: Int) {
+        Prefs.updateActive(this) { Profiles.resize(it, n) }
+        Toast.makeText(this, "$n puntos. Pulsa Calibrar si alguno no coincide con su círculo.", Toast.LENGTH_LONG).show()
+        syncSliders()
+        refresh()
+    }
+
+    private fun promptText(title: String, initial: String, ok: (String) -> Unit) {
+        val et = EditText(this).apply {
+            setText(initial)
+            setTextColor(Palette.TEXT)
+            setSelectAllOnFocus(true)
+        }
+        dialog().setTitle(title).setView(padded(et))
+            .setPositiveButton("Aceptar") { _, _ -> ok(et.text.toString()) }
+            .setNegativeButton("Cancelar", null)
+            .show()
+    }
+
+    private fun showProfilesDialog() {
+        val repo = Prefs.repo(this)
+        val list = repo.list()
+        val active = repo.activeId()
+        val names = list.map { (if (it.id == active) "✓ " else "    ") + it.name + "  (${it.count} puntos)" } + "＋ Nuevo perfil…"
+        dialog().setTitle("Perfiles")
+            .setItems(names.toTypedArray()) { _, which ->
+                if (which < list.size) {
+                    repo.setActive(list[which].id)
+                    onProfileChanged()
+                } else {
+                    newProfileDialog()
+                }
+            }
+            .setNegativeButton("Cerrar", null)
+            .show()
+    }
+
+    private fun newProfileDialog() {
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val name = EditText(this).apply { hint = "Nombre"; setTextColor(Palette.TEXT); setHintTextColor(Palette.MUTED); setText("Perfil personalizado") }
+        val count = EditText(this).apply {
+            hint = "Número de puntos (1–${DetectorConfig.MAX_POINTS})"
+            setTextColor(Palette.TEXT); setHintTextColor(Palette.MUTED)
+            inputType = InputType.TYPE_CLASS_NUMBER
+            setText(Engine.config.count.toString())
+        }
+        box.addView(name); box.addView(count)
+        dialog().setTitle("Nuevo perfil").setView(padded(box))
+            .setPositiveButton("Crear") { _, _ ->
+                val n = count.text.toString().trim().toIntOrNull()
+                if (n == null || n !in 1..DetectorConfig.MAX_POINTS) {
+                    Toast.makeText(this, "Número de puntos no válido", Toast.LENGTH_SHORT).show()
+                } else {
+                    val repo = Prefs.repo(this)
+                    val p = repo.create(name.text.toString(), n, Engine.config.blueThreshold)
+                    repo.setActive(p.id)
+                    onProfileChanged()
+                }
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
+    }
+
+    private fun saveCopy() {
+        val repo = Prefs.repo(this)
+        val cur = repo.active()
+        promptText("Guardar copia del perfil", cur.name + " (copia)") { n ->
+            repo.duplicate(cur.id, n)?.let { repo.setActive(it.id) }
+            onProfileChanged()
+        }
+    }
+
+    private fun renameProfile() {
+        val repo = Prefs.repo(this)
+        val cur = repo.active()
+        promptText("Renombrar perfil", cur.name) { n ->
+            repo.rename(cur.id, n)
+            onProfileChanged()
+        }
+    }
+
+    private fun deleteProfile() {
+        val repo = Prefs.repo(this)
+        val cur = repo.active()
+        if (repo.list().size <= 1) {
+            Toast.makeText(this, "No se puede eliminar el último perfil", Toast.LENGTH_SHORT).show()
+            return
+        }
+        dialog().setTitle("¿Eliminar «${cur.name}»?")
+            .setMessage("Se perderán sus puntos y ajustes.")
+            .setPositiveButton("Eliminar") { _, _ ->
+                repo.delete(cur.id)
+                onProfileChanged()
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
+    }
+
+    private fun onProfileChanged() {
+        Prefs.apply(this)
+        syncSliders()
+        refresh()
+    }
+
+    private fun syncSliders() {
+        val cfg = Engine.config
+        blueSeek.progress = (cfg.blueThreshold - 10).coerceIn(0, 140)
+        val avgR = if (cfg.count == 0) 18 else cfg.radii.average().toInt()
+        radiusSeek.progress = (avgR - 4).coerceIn(0, 146)
+    }
+
+    // ------------------------------------------------------------- acciones
+
     private fun setDelay(ms: Long) {
-        updateConfig { it.copy(delayMs = ms) }
+        Prefs.setDelay(this, ms)
         customDelay.setText("")
         hideKeyboard()
         refresh()
@@ -289,7 +509,7 @@ class MainActivity : Activity() {
             Toast.makeText(this, "Introduce un valor entre 0 y 60000 ms", Toast.LENGTH_SHORT).show()
             return
         }
-        updateConfig { it.copy(delayMs = v) }
+        Prefs.setDelay(this, v)
         hideKeyboard()
         refresh()
     }
@@ -321,9 +541,7 @@ class MainActivity : Activity() {
         if (requestCode == REQ_CAPTURE) {
             if (resultCode == RESULT_OK && data != null) {
                 CoreService.start(this, resultCode, data)
-                if (!Engine.config.calibrated) {
-                    Toast.makeText(this, "Ahora calibra los 6 círculos con el juego en pantalla", Toast.LENGTH_LONG).show()
-                }
+                Toast.makeText(this, "Listo. Abre el juego y pulsa INICIAR (o Calibrar para afinar los puntos)", Toast.LENGTH_LONG).show()
             } else {
                 Toast.makeText(this, "Captura de pantalla denegada", Toast.LENGTH_SHORT).show()
             }
@@ -353,6 +571,26 @@ class MainActivity : Activity() {
 
         val cfg = Engine.config
         val s = Engine.stats.snapshot()
+
+        pointsInfo.text = "${cfg.count} ${if (cfg.count == 1) "punto" else "puntos"} · ${Engine.profileName}"
+        val (stateTxt, stateColor) = when {
+            !capOk -> Pair("Estado: captura sin iniciar", Palette.MUTED)
+            !cfg.calibrated -> Pair("Estado: sin calibrar", Palette.ORANGE)
+            Engine.orientationMismatch -> Pair("Estado: gira la pantalla (orientación distinta a la calibrada)", Palette.ORANGE)
+            Engine.running -> Pair("Estado: detección activa", Palette.GREEN)
+            else -> Pair("Estado: detenida (pulsa INICIAR en el panel flotante)", Palette.TEXT)
+        }
+        stateInfo.text = stateTxt
+        stateInfo.setTextColor(stateColor)
+        delaySummary.text = "Tiempo de reacción configurado: ${cfg.delayMs} ms"
+        latencySummary.text = if (s.taps == 0) {
+            "Latencia real del sistema: —"
+        } else {
+            String.format(Locale.US, "Latencia real del sistema: %.0f ms (media %.0f ms)", s.lastSystemLatencyMs, s.meanSystemLatencyMs)
+        }
+        respSummary.text = "Respuestas: ${s.taps}"
+        profileInfo.text = "Activo: ${Engine.profileName} · ${cfg.count} puntos"
+
         var matched = false
         for ((chip, ms) in chips) {
             val on = ms == cfg.delayMs
@@ -370,15 +608,13 @@ class MainActivity : Activity() {
                 s.lastSystemLatencyMs, s.meanSystemLatencyMs,
             )
         }
-        calibInfo.text = if (cfg.calibrated) {
-            "Calibrado: 6 círculos guardados (${cfg.calibW}×${cfg.calibH}). Recalibra si cambias de resolución o mueves el juego."
-        } else {
-            "Sin calibrar: coloca los 6 marcadores sobre los círculos grises."
-        }
+        calibInfo.text = "Perfil «${Engine.profileName}»: ${cfg.count} puntos (${cfg.calibW}×${cfg.calibH}). " +
+            "Ya están colocados; usa Calibrar para ajustarlos al juego (Auto, arrastrar, añadir o quitar)."
         statsText.text = String.format(
             Locale.US,
-            "Estímulos detectados: %d\nPulsaciones ejecutadas: %d\nTiempo medio de reacción: %s\nMejor tiempo de reacción: %s\nDetecciones fallidas: %d\nDetecciones correctas: %.1f %%",
+            "Estímulos detectados: %d\nPulsaciones ejecutadas: %d\nÚltimo punto iluminado: %s\nTiempo medio de reacción: %s\nMejor tiempo de reacción: %s\nDetecciones fallidas: %d\nDetecciones correctas: %.1f %%",
             s.detected, s.taps,
+            if (s.lastPoint >= 0) "${s.lastPoint + 1}" else "—",
             if (s.taps == 0) "—" else String.format(Locale.US, "%.0f ms", s.meanReactionMs),
             if (s.taps == 0) "—" else String.format(Locale.US, "%.0f ms", s.bestReactionMs),
             s.failed,

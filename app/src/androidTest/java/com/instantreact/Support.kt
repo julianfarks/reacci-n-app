@@ -5,6 +5,7 @@ import android.hardware.display.DisplayManager
 import android.media.Image
 import android.util.DisplayMetrics
 import android.view.Display
+import com.instantreact.core.DefaultLayout
 import com.instantreact.core.DetectorConfig
 
 fun waitFor(timeoutMs: Long, cond: () -> Boolean): Boolean {
@@ -24,14 +25,19 @@ fun realScreen(ctx: Context): DisplayMetrics {
     return m
 }
 
-/** Disposición 3x2 de seis círculos para un tamaño de pantalla. */
-class Layout6(val w: Int, val h: Int) {
+/** Disposición por defecto de la app (8 puntos) para un tamaño de pantalla. */
+class LayoutN(val w: Int, val h: Int, val n: Int = 8) {
     val radius = minOf(w, h) * 7 / 100
-    val xs = IntArray(6) { w * (it % 3 + 1) / 4 }
-    val ys = IntArray(6) { h * (4 + 2 * (it / 3)) / 10 }
+    val xs: IntArray
+    val ys: IntArray
+
+    init {
+        val (x, y) = DefaultLayout.positions(n, w, h)
+        xs = x; ys = y
+    }
 
     fun config() = DetectorConfig(
-        xs = xs.copyOf(), ys = ys.copyOf(), radius = radius * 6 / 10, blueThreshold = 60,
+        xs = xs.copyOf(), ys = ys.copyOf(), radii = IntArray(n) { radius * 6 / 10 }, blueThreshold = 60,
         calibrated = true, calibW = w, calibH = h,
     )
 
@@ -40,9 +46,9 @@ class Layout6(val w: Int, val h: Int) {
         val plane = image.planes[0]
         val rs = plane.rowStride
         val bytes = ByteArray(rs * h)
-        for (y in 0 until h) for (x in 0 until w) put(bytes, y * rs + x * 4, 12, 14, 18)
-        for (i in 0 until 6) {
-            val (r, g, b) = if (i in blue) Triple(40, 120, 255) else Triple(128, 128, 128)
+        for (y in 0 until h) for (x in 0 until w) put(bytes, y * rs + x * 4, 4, 5, 10)
+        for (i in 0 until n) {
+            val (r, g, b) = if (i in blue) Triple(40, 120, 255) else Triple(11, 12, 16)
             for (y in maxOf(0, ys[i] - radius)..minOf(h - 1, ys[i] + radius)) {
                 for (x in maxOf(0, xs[i] - radius)..minOf(w - 1, xs[i] + radius)) {
                     val dx = x - xs[i]; val dy = y - ys[i]

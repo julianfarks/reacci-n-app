@@ -27,7 +27,7 @@ class ImagePipelineInstrumentedTest {
     fun detectsGrayToBlueWithoutDuplicatesThroughRealImageReader() {
         val w = 720
         val h = 1280
-        val layout = Layout6(w, h)
+        val layout = LayoutN(w, h)
         val processor = FrameProcessor(layout.config())
         val thread = HandlerThread("pipeline-test").also { it.start() }
         val handler = Handler(thread.looper)

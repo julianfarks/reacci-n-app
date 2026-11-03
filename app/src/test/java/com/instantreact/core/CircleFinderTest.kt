@@ -12,7 +12,7 @@ class CircleFinderTest {
             val g = GameLayout(w, h)
             val s = TestScreen(w, h); g.draw(s)
             val (px, gw, gh) = s.downsample(step)
-            val found = CircleFinder.find(px, gw, gh)
+            val found = CircleFinder.find(px, gw, gh, 6)
             assertEquals("$w x $h", 6, found.size)
             for (i in 0 until 6) {
                 val fx = found[i].x * step + step / 2
@@ -32,7 +32,7 @@ class CircleFinderTest {
         s.circle(540, 200, 60, 40, 120, 255)      // círculo azul decorativo
         s.rect(100, 2000, 980, 2060, 128, 128, 128) // barra gris (no circular)
         val (px, gw, gh) = s.downsample(step)
-        val found = CircleFinder.find(px, gw, gh)
+        val found = CircleFinder.find(px, gw, gh, 6)
         assertEquals(6, found.size)
     }
 
@@ -41,14 +41,14 @@ class CircleFinderTest {
         val s = TestScreen(1080, 2400)
         for (i in 0 until 4) s.circle(g.xs[i], g.ys[i], g.radius, 128, 128, 128)
         val (px, gw, gh) = s.downsample(step)
-        assertEquals(4, CircleFinder.find(px, gw, gh).size)
+        assertEquals(4, CircleFinder.find(px, gw, gh, 6).size)
     }
 
     @Test fun readingOrderIsRowsThenColumns() {
         val g = GameLayout(1080, 2400)
         val s = TestScreen(1080, 2400); g.draw(s)
         val (px, gw, gh) = s.downsample(step)
-        val found = CircleFinder.find(px, gw, gh)
+        val found = CircleFinder.find(px, gw, gh, 6)
         assertTrue(found[0].x < found[1].x && found[1].x < found[2].x)
         assertTrue(found[3].x < found[4].x && found[4].x < found[5].x)
         assertTrue(found[0].y < found[3].y)

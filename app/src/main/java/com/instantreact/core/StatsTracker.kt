@@ -11,6 +11,8 @@ data class StatsSnapshot(
     val lastConfiguredDelayMs: Long,
     val meanSystemLatencyMs: Double,
     val lastTapCompletedMs: Double,
+    /** Índice (0-based) del último punto que se iluminó y se pulsó, o -1. */
+    val lastPoint: Int = -1,
 ) {
     /** Porcentaje de estímulos detectados que acabaron en pulsación correcta. */
     val successPercent: Double
@@ -35,10 +37,12 @@ class StatsTracker {
     private var lastSystem = 0.0
     private var lastDelay = 0L
     private var lastCompleted = 0.0
+    private var lastPoint = -1
 
     fun onDetected() = synchronized(lock) { detected++ }
 
-    fun onDispatched(reactionMs: Double, systemMs: Double, configuredDelayMs: Long) = synchronized(lock) {
+    fun onDispatched(reactionMs: Double, systemMs: Double, configuredDelayMs: Long, point: Int = -1) = synchronized(lock) {
+        lastPoint = point
         taps++
         sumReaction += reactionMs
         sumSystem += systemMs
@@ -62,7 +66,7 @@ class StatsTracker {
     fun reset() = synchronized(lock) {
         detected = 0; taps = 0; failed = 0
         sumReaction = 0.0; sumSystem = 0.0; best = Double.MAX_VALUE
-        lastReaction = 0.0; lastSystem = 0.0; lastDelay = 0L; lastCompleted = 0.0
+        lastReaction = 0.0; lastSystem = 0.0; lastDelay = 0L; lastCompleted = 0.0; lastPoint = -1
     }
 
     fun snapshot(): StatsSnapshot = synchronized(lock) {
@@ -77,6 +81,7 @@ class StatsTracker {
             lastConfiguredDelayMs = lastDelay,
             meanSystemLatencyMs = if (taps == 0) 0.0 else sumSystem / taps,
             lastTapCompletedMs = lastCompleted,
+            lastPoint = lastPoint,
         )
     }
 }

@@ -97,7 +97,7 @@ class CoreService : Service() {
             return
         }
 
-        Engine.config = Prefs.load(this)
+        Prefs.apply(this)
         processor = FrameProcessor(Engine.config)
 
         captureThread = HandlerThread("ir-capture", Process.THREAD_PRIORITY_URGENT_DISPLAY).also { it.start() }
@@ -140,7 +140,7 @@ class CoreService : Service() {
         panel = FloatingPanel(this, object : FloatingPanel.Callbacks {
             override fun onStart() {
                 if (!Engine.config.calibrated) {
-                    Toast.makeText(this@CoreService, "Primero calibra los 6 círculos", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@CoreService, "Primero calibra los puntos", Toast.LENGTH_SHORT).show()
                     return
                 }
                 if (ReactAccessibilityService.instance == null) {
@@ -205,18 +205,18 @@ class CoreService : Service() {
         val delay = cfg.delayMs
         val dur = cfg.tapDurationMs
         if (delay <= 0L) {
-            doTap(x, y, tFrame, 0L, dur)
+            doTap(x, y, tFrame, 0L, dur, index)
         } else {
-            tapHandler.postDelayed({ doTap(x, y, tFrame, delay, dur) }, delay)
+            tapHandler.postDelayed({ doTap(x, y, tFrame, delay, dur, index) }, delay)
         }
     }
 
-    private fun doTap(x: Int, y: Int, tFrame: Long, delayMs: Long, durMs: Long) {
+    private fun doTap(x: Int, y: Int, tFrame: Long, delayMs: Long, durMs: Long, index: Int) {
         val tDispatch = SystemClock.elapsedRealtimeNanos()
         val reaction = (tDispatch - tFrame) / 1_000_000.0
         val system = maxOf(0.0, reaction - delayMs)
         val stats = Engine.stats
-        stats.onDispatched(reaction, system, delayMs)
+        stats.onDispatched(reaction, system, delayMs, index)
         val ok = TapExecutor.tap(x, y, durMs, object : TapExecutor.Result {
             override fun onCompleted() {
                 stats.onTapCompleted((SystemClock.elapsedRealtimeNanos() - tFrame) / 1_000_000.0)
@@ -275,9 +275,9 @@ class CoreService : Service() {
         Engine.running = false
         panel?.hide()
         snapshotEnabled = true
-        calibration = CalibrationOverlay(this, Engine.config, cap.width, cap.height, object : CalibrationOverlay.Callbacks {
+        calibration = CalibrationOverlay(this, Engine.config, Engine.profileName, cap.width, cap.height, object : CalibrationOverlay.Callbacks {
             override fun onSave(cfg: DetectorConfig) {
-                Prefs.save(this@CoreService, cfg)
+                Prefs.saveCalibration(this@CoreService, cfg)
                 Toast.makeText(this@CoreService, "Calibración guardada", Toast.LENGTH_SHORT).show()
                 closeCalibration()
             }
