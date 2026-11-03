@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Instant React</string>
+    <string name="accessibility_description">Instant React usa este servicio únicamente para ejecutar las pulsaciones que tú autorizas sobre los círculos del juego. No lee ni guarda el contenido de tu pantalla.</string>
+</resources>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.InstantReact" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/ir_bg</item>
+        <item name="android:colorAccent">@color/ir_blue</item>
+        <item name="android:statusBarColor">@color/ir_bg</item>
+        <item name="android:navigationBarColor">@color/ir_bg</item>
+    </style>
+</resources>

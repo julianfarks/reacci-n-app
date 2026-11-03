@@ -1,0 +1,70 @@
+name: Android CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Compilar, probar y generar APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Pruebas unitarias
+        run: ./gradlew testDebugUnitTest --console=plain
+      - name: APK debug + release y compilar pruebas instrumentadas
+        run: ./gradlew assembleDebug assembleRelease assembleDebugAndroidTest --console=plain
+      - name: Reunir APKs
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk dist/InstantReact-debug.apk
+          cp app/build/outputs/apk/release/app-release.apk dist/InstantReact-release.apk
+          cp app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk dist/InstantReact-androidTest.apk
+      - name: Informe de aapt
+        run: |
+          $ANDROID_HOME/build-tools/$(ls $ANDROID_HOME/build-tools | sort -V | tail -1)/aapt2 dump badging dist/InstantReact-release.apk | head -12 | tee dist/aapt-release.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: InstantReact-apks
+          path: dist/*
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unit-test-reports
+          path: app/build/reports/tests/testDebugUnitTest
+
+  emulator:
+    name: Instalar en emulador y probar funciones
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: InstantReact-apks
+          path: dist
+      - name: Habilitar KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          script: bash scripts/emulator_smoke.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: emulator-evidence
+          path: evidence/*
