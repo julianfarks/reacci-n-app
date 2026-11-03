@@ -72,10 +72,44 @@ jobs:
           name: emulator-evidence
           path: evidence/*
 
+  release-check:
+    name: APK release en emulador (API ${{ matrix.api }})
+    runs-on: ubuntu-latest
+    needs: build
+    continue-on-error: ${{ matrix.api == 36 }}
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [34, 36]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: InstantReact-apks
+          path: dist
+      - name: Habilitar KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          script: bash scripts/release_check.sh ${{ matrix.api }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-check-api${{ matrix.api }}
+          path: evidence/*
+
   release:
     name: Publicar APK en Releases
     runs-on: ubuntu-latest
-    needs: [build, emulator]
+    needs: [build, emulator, release-check]
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     steps:
       - uses: actions/download-artifact@v4

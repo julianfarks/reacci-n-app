@@ -1,6 +1,7 @@
 package com.instantreact.service
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.Intent
 import android.view.accessibility.AccessibilityEvent
 
@@ -11,8 +12,16 @@ import android.view.accessibility.AccessibilityEvent
 class ReactAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
-        super.onServiceConnected()
-        instance = this
+        try {
+            super.onServiceConnected()
+            instance = this
+            lastConnected = System.currentTimeMillis()
+            val canGestures = serviceInfo?.capabilities?.and(AccessibilityServiceInfo.CAPABILITY_CAN_PERFORM_GESTURES) != 0
+            Diagnostics.event("onServiceConnected OK · canPerformGestures=$canGestures · pid=${android.os.Process.myPid()}")
+        } catch (t: Throwable) {
+            Diagnostics.event("onServiceConnected FALLÓ", t)
+            throw t
+        }
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) = Unit
@@ -20,11 +29,13 @@ class ReactAccessibilityService : AccessibilityService() {
     override fun onInterrupt() = Unit
 
     override fun onUnbind(intent: Intent?): Boolean {
+        Diagnostics.event("onUnbind")
         instance = null
         return super.onUnbind(intent)
     }
 
     override fun onDestroy() {
+        Diagnostics.event("onDestroy")
         instance = null
         super.onDestroy()
     }
@@ -32,5 +43,8 @@ class ReactAccessibilityService : AccessibilityService() {
     companion object {
         @Volatile
         var instance: ReactAccessibilityService? = null
+
+        @Volatile
+        var lastConnected: Long? = null
     }
 }

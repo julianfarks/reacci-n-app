@@ -31,6 +31,7 @@ import com.instantreact.core.DetectorConfig
 import com.instantreact.core.Engine
 import com.instantreact.core.Profiles
 import com.instantreact.service.CoreService
+import com.instantreact.service.Diagnostics
 import com.instantreact.service.Prefs
 import com.instantreact.service.ReactAccessibilityService
 import com.instantreact.ui.Palette
@@ -57,6 +58,7 @@ class MainActivity : Activity() {
     private lateinit var profileInfo: TextView
     private lateinit var overlayStatus: TextView
     private lateinit var accStatus: TextView
+    private lateinit var diagText: TextView
     private lateinit var captureStatus: TextView
     private lateinit var activateBtn: TextView
     private lateinit var delayInfo: TextView
@@ -255,6 +257,20 @@ class MainActivity : Activity() {
         st.addView(statsText)
         st.addView(pillView("Reiniciar estadísticas", false) { Engine.stats.reset() })
         content.addView(st)
+
+        // --- Diagnóstico
+        val dg = card()
+        dg.addView(text("Diagnóstico del servicio de accesibilidad", 16f, Palette.BLUE, true))
+        diagText = text("", 12f, Palette.TEXT).margins(0, dp(8), 0, dp(8)) as TextView
+        dg.addView(diagText)
+        val dr1 = row()
+        val testBtn = pillView("Probar pulsación") { startActivity(Intent(this, TapTestActivity::class.java)) }
+        val copyRep = pillView("Copiar informe", false) { copyReport() }
+        testBtn.weight(1f); copyRep.weight(1f)
+        (testBtn.layoutParams as LinearLayout.LayoutParams).rightMargin = dp(8)
+        dr1.addView(testBtn); dr1.addView(copyRep)
+        dg.addView(dr1)
+        content.addView(dg)
 
         return ScrollView(this).apply {
             setBackgroundColor(Palette.BG)
@@ -548,6 +564,12 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun copyReport() {
+        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        cm.setPrimaryClip(android.content.ClipData.newPlainText("Instant React", Diagnostics.report(this)))
+        Toast.makeText(this, "Informe copiado. Pégalo en un mensaje para revisarlo", Toast.LENGTH_LONG).show()
+    }
+
     private fun startCalibration() {
         if (CoreService.instance == null) {
             Toast.makeText(this, "Activa primero la captura y el panel flotante", Toast.LENGTH_LONG).show()
@@ -565,7 +587,9 @@ class MainActivity : Activity() {
         val accOk = ReactAccessibilityService.instance != null
         val capOk = CoreService.instance != null
         setStatus(overlayStatus, overlayOk, "Concedido", "Pendiente")
-        setStatus(accStatus, accOk, "Activo", "Desactivado")
+        val accEnabled = Diagnostics.isEnabledInSettings(this)
+        setStatus(accStatus, accOk, "Activo", if (accEnabled) "Activado pero sin conectar (ver diagnóstico)" else "Desactivado")
+        diagText.text = Diagnostics.report(this).lineSequence().take(9).joinToString("\n")
         setStatus(captureStatus, capOk, "En marcha", "Sin iniciar")
         activateBtn.text = if (capOk) "DETENER CAPTURA Y PANEL" else "ACTIVAR CAPTURA Y PANEL FLOTANTE"
 
